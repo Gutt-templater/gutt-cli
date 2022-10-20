@@ -4,6 +4,7 @@ const path = require('path')
 const yargs = require('yargs')
 const fs = require('fs')
 const gutt = require('gutt')
+const package = require('./package.json')
 
 let files
 let stringifier
@@ -12,7 +13,7 @@ const stringifiers = []
 let template
 let cwd
 let currentOutput
-const argvs = yargs
+const argvs = yargs(process.argv.slice(2))
 	.usage('Usage: gutt <files ...> [options]')
 	.help('h')
 	.alias('h', 'help')
@@ -26,9 +27,7 @@ const argvs = yargs
 	.example('gutt templates/*.{gutt,tmplt} -s node-stringifier -o dist/templates/')
 	.example('gutt templates/ -s node-stringifier -o dist/node-templates/ -s \\ browser-stringifier -o dist/js-templates/')
 	.example('gutt components/**/*.gutt templates/*.gutt -s node-stringifier -o dist')
-	.version(function () {
-		return 'v' + require('./package.json').version
-	})
+	.version('v' + package.version)
 	.epilogue('For more information visit https://guttjs.com/')
 	.argv
 
@@ -70,7 +69,7 @@ stringifier.forEach(function (stringifier) {
 	stringifiers.push(stringifier)
 })
 
-function getOutputPath (filePath) {
+function getOutputPath(filePath) {
 	let cwdPropped = false
 
 	cwd.forEach(function (cwd) {
@@ -87,20 +86,6 @@ function getOutputPath (filePath) {
 	return filePath
 }
 
-function mkdirRecoursive (output, dirname) {
-	let cwd = process.cwd()
-
-	output = output.split(path.sep).concat(path.normalize(dirname).split(path.sep))
-
-	output.forEach(function (dirname) {
-		cwd = path.resolve(cwd, dirname)
-
-		if (!fs.existsSync(cwd)) {
-			fs.mkdirSync(cwd, 777)
-		}
-	})
-}
-
 stringifiers.forEach(function (stringifier, index) {
 	files.forEach(function (filePath) {
 		template = gutt.parseFile(filePath).stringifyWith(stringifier.handler)
@@ -109,16 +94,22 @@ stringifiers.forEach(function (stringifier, index) {
 			currentOutput = output[0]
 
 			if (output.length > 1) {
-				output[0] = output[index]
+				currentOutput = output[index]
 			}
 
 			filePath = getOutputPath(filePath) + '.' + stringifier.meta.ext
 
-			mkdirRecoursive(currentOutput, path.dirname(filePath))
+			fs.mkdirSync(path.resolve(currentOutput, path.dirname(filePath)), {
+				recursive: true
+			})
 
 			filePath = path.resolve(process.cwd(), currentOutput, filePath)
 
-			fs.writeFile(filePath, template)
+			fs.writeFile(filePath, template, function(error) {
+				if (error) {
+					console.error(error)
+				}
+			})
 		}
 	})
 })
